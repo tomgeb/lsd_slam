@@ -68,6 +68,10 @@ public:
 	bool flushPointcloud;
 	bool printNumbers;
 private:
+
+	void writePointCloudsAsPly(const std::vector<KeyFrameDisplay*>& keyframes, const std::string& outFile);
+	void writePointCloudAsPly(KeyFrameDisplay* keyframe, const std::string& outFile);
+
 	std::map<int, KeyFrameDisplay*> keyframesByID;
 	std::vector<KeyFrameDisplay*> keyframes;
 	std::vector<GraphConstraintPt> constraints;

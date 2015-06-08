@@ -59,40 +59,41 @@ void KeyFrameGraphDisplay::draw()
 
 	if(flushPointcloud)
 	{
+		const std::string path = ros::package::getPath("lsd_slam_viewer");
 
-		printf("Flushing Pointcloud to %s!\n", (ros::package::getPath("lsd_slam_viewer")+"/pc_tmp.ply").c_str());
-		std::ofstream f((ros::package::getPath("lsd_slam_viewer")+"/pc_tmp.ply").c_str());
-		int numpts = 0;
-		for(unsigned int i=0;i<keyframes.size();i++)
+		// write individual point clouds
+		std::ofstream trajectory((path + "/trajectory.txt").c_str());
+		trajectory << "ply	tx	ty	tz	qx	qy	qz	qw\n";
+
+		for(size_t i = cutFirstNKf; i < keyframes.size(); ++i)
 		{
-			if((int)i > cutFirstNKf)
-				numpts += keyframes[i]->flushPC(&f);
+			std::ostringstream ss;
+			ss << "pointcloud_" << i << ".ply";
+
+			writePointCloudAsPly(keyframes[i],path + "/" + ss.str());
+
+			Sophus::Sim3f worldToCam = keyframes[i]->camToWorld.inverse();
+			Eigen::Quaternionf q(worldToCam.rotationMatrix());
+			trajectory
+				<< ss.str()
+				<< " " << worldToCam.translation().x()
+				<< " " << worldToCam.translation().y()
+				<< " " << worldToCam.translation().z()
+				<< " " << q.x()
+				<< " " << q.y()
+				<< " " << q.z()
+				<< " " << q.w()
+				<< "\n";
+
 		}
-		f.flush();
-		f.close();
 
-		std::ofstream f2((ros::package::getPath("lsd_slam_viewer")+"/pc.ply").c_str());
-		f2 << std::string("ply\n");
-		f2 << std::string("format binary_little_endian 1.0\n");
-		f2 << std::string("element vertex ") << numpts << std::string("\n");
-		f2 << std::string("property float x\n");
-		f2 << std::string("property float y\n");
-		f2 << std::string("property float z\n");
-		f2 << std::string("property float intensity\n");
-		f2 << std::string("end_header\n");
+		// write all point clouds
+		writePointCloudsAsPly(
+				std::vector<KeyFrameDisplay*>(keyframes.begin()+cutFirstNKf,keyframes.end()),
+				path + "/pointcloud_complete.ply");
 
-		std::ifstream f3((ros::package::getPath("lsd_slam_viewer")+"/pc_tmp.ply").c_str());
-		while(!f3.eof()) f2.put(f3.get());
-
-		f2.close();
-		f3.close();
-
-		system(("rm "+ros::package::getPath("lsd_slam_viewer")+"/pc_tmp.ply").c_str());
 		flushPointcloud = false;
-		printf("Done Flushing Pointcloud with %d points!\n", numpts);
-
 	}
-
 
 	if(printNumbers)
 	{
@@ -162,7 +163,7 @@ void KeyFrameGraphDisplay::addGraphMsg(lsd_slam_viewer::keyframeGraphMsgConstPtr
 	constraints.resize(msg->numConstraints);
 	assert(msg->constraintsData.size() == sizeof(GraphConstraint)*msg->numConstraints);
 	GraphConstraint* constraintsIn = (GraphConstraint*)msg->constraintsData.data();
-	for(int i=0;i<msg->numConstraints;i++)
+	for(size_t i=0;i<msg->numConstraints;i++)
 	{
 		constraints[i].err = constraintsIn[i].err;
 		constraints[i].from = 0;
@@ -205,4 +206,65 @@ void KeyFrameGraphDisplay::addGraphMsg(lsd_slam_viewer::keyframeGraphMsgConstPtr
 	dataMutex.unlock();
 
 //	printf("graph update: %d constraints, %d poses\n", msg->numConstraints, msg->numFrames);
+}
+
+void writePly(int numPoints, const std::string& tempFile, const std::string& outFile)
+{
+	std::ofstream f2(outFile.c_str());
+	f2 << std::string("ply\n");
+	f2 << std::string("format binary_little_endian 1.0\n");
+	f2 << std::string("element vertex ") << numPoints << std::string("\n");
+	f2 << std::string("property float x\n");
+	f2 << std::string("property float y\n");
+	f2 << std::string("property float z\n");
+	f2 << std::string("property float intensity\n");
+	f2 << std::string("end_header\n");
+
+	std::ifstream f3(tempFile.c_str());
+	while(!f3.eof())
+		f2.put(f3.get());
+
+	f2.close();
+	f3.close();
+}
+
+void KeyFrameGraphDisplay::writePointCloudsAsPly(const std::vector<KeyFrameDisplay*>& keyframes, const std::string& outFile)
+{
+	printf("Flushing Pointcloud to %s!\n", outFile.c_str());
+
+	const std::string tempFile = ros::package::getPath("lsd_slam_viewer")+"/pc_tmp.ply";
+
+	int numPoints = 0;
+	{
+		std::ofstream f(tempFile.c_str());
+		for(size_t i=0; i<keyframes.size(); ++i)
+			numPoints += keyframes[i]->flushPC(&f);
+		f.flush();
+		f.close();
+	}
+
+	writePly(numPoints, tempFile, outFile);
+
+	system(("rm " + tempFile).c_str());
+	printf("Done Flushing Pointcloud with %d points!\n", numPoints);
+}
+
+void KeyFrameGraphDisplay::writePointCloudAsPly(KeyFrameDisplay* keyframe, const std::string& outFile)
+{
+	printf("Flushing Pointcloud to %s!\n", outFile.c_str());
+
+	const std::string tempFile = ros::package::getPath("lsd_slam_viewer")+"/pc_tmp.ply";
+
+	int numPoints = 0;
+	{
+		std::ofstream f(tempFile.c_str());
+		numPoints += keyframe->flushPC(&f);
+		f.flush();
+		f.close();
+	}
+
+	writePly(numPoints, tempFile, outFile);
+
+	system(("rm " + tempFile).c_str());
+	printf("Done Flushing Pointcloud with %d points!\n", numPoints);
 }

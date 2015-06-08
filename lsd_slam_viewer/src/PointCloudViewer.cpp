@@ -72,6 +72,7 @@ PointCloudViewer::PointCloudViewer()
 	setSnapshotFormat(QString("PNG"));
 
 	reset();
+
 }
 
 
@@ -113,6 +114,7 @@ void PointCloudViewer::reset()
 
 	setSceneRadius(80);
 	setTextIsEnabled(false);
+	camera()->setZNearCoefficient(0.0005);
 	lastAutoplayCheckedSaveTime = -1;
 
 	animationPlaybackEnabled = false;
